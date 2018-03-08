@@ -79,6 +79,8 @@ void network_cleanup(void) {
         if (clientList[i]) {
             pthread_mutex_destroy(clientList[i]->lock);
             free(clientList[i]->lock);
+            close(clientList[i]->pipes[0]);
+            close(clientList[i]->pipes[1]);
             free(clientList[i]);
         }
     }
@@ -217,21 +219,18 @@ void *eventLoop(void *epollfd) {
         //n can't be -1 because the handling for that is done in waitForEpollEvent
         assert(n != -1);
         for (int i = 0; i < n; ++i) {
-            if (unlikely(eventList[i].events & EPOLLERR || eventList[i].events & EPOLLHUP
-                        || eventList[i].events & EPOLLRDHUP)) {
+            if (unlikely(eventList[i].events & EPOLLERR || eventList[i].events & EPOLLHUP)) {
                 handleSocketError(eventList[i].data.ptr);
             } else {
                 if (likely(eventList[i].events & EPOLLIN)) {
                     if (eventList[i].data.ptr) {
                         //Regular read connection
-                        handleIncomingPacket(eventList[i].data.ptr);
+                        struct client *client = (struct client *) eventList[i].data.ptr;
+                        forward_traffic(client->socket, client->socket, client);
                     } else {
                         //Null data pointer means listen socket has incoming connection
                         handleIncomingConnection(efd);
                     }
-                }
-                if (likely(eventList[i].events & EPOLLOUT)) {
-                    //unsigned char data[MAX_INPUT_SIZE];
                 }
             }
         }
@@ -323,6 +322,9 @@ void initClientStruct(struct client *newClient, int sock) {
     newClient->lock = checked_malloc(sizeof(pthread_mutex_t));
     pthread_mutex_init(newClient->lock, NULL);
     newClient->enabled = true;
+    if (pipe(newClient->pipes) < 0) {
+        fatal_error("pipe");
+    }
 }
 
 /*

@@ -17,6 +17,7 @@
  *
  * PROGRAMMER: John Agapeyev
  */
+#define _GNU_SOURCE
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/fcntl.h>
@@ -28,7 +29,9 @@
 #include <unistd.h>
 #include <errno.h>
 #include <assert.h>
+#include <limits.h>
 #include "socket.h"
+#include "network.h"
 #include "macro.h"
 
 /*
@@ -294,3 +297,35 @@ start:
     }
 }
 
+void forward_traffic(const int in, const int out, const struct client *const client) {
+    for (;;) {
+        int n = splice(in, NULL, client->pipes[0], NULL, USHRT_MAX, SPLICE_F_MOVE | SPLICE_F_NONBLOCK);
+        if (n == -1) {
+            if (errno == EAGAIN) {
+                return;
+            } else {
+                fatal_error("splice1");
+            }
+        } else if (n == 0) {
+            return;
+        } else {
+            //Don't need non_blocking because the only blocking would be sending, which should be blocked on
+            int x;
+resend:
+            x = splice(client->pipes[1], NULL, out, NULL, n, SPLICE_F_MOVE | SPLICE_F_MORE);
+            if (x == -1) {
+                fatal_error("splice2");
+            } else if (x == 0) {
+                //Input pipe is empty
+                continue;
+            } else if (x == n) {
+                //Sent all the data that was read
+                continue;
+            } else {
+                //x < n
+                n -= x;
+                goto resend;
+            }
+        }
+    }
+}

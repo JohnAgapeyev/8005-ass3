@@ -10,6 +10,7 @@ struct client {
     int socket;
     bool enabled;
     pthread_mutex_t *lock;
+    int pipes[2];
 };
 
 extern struct client **clientList;
