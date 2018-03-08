@@ -7,7 +7,8 @@
 #include <pthread.h>
 
 struct client {
-    int socket;
+    int socket_1;
+    int socket_2;
     bool enabled;
     pthread_mutex_t *lock;
     int pipes[2];
@@ -28,5 +29,6 @@ void *eventLoop(void *epollfd);
 void handleIncomingConnection(const int efd);
 void handleSocketError(struct client *entry);
 void handleIncomingPacket(struct client *src);
+void establish_forwarding_connections(void);
 
 #endif

@@ -124,6 +124,19 @@ void process_packet(const unsigned char * const buffer, const size_t bufsize, st
 #endif
 }
 
+//File goes 
+void establish_forwarding_connections(void) {
+    FILE *fp = fopen("forward.conf", "r");
+    if (fp == NULL) {
+        fprintf(stderr, "Configuration file forward.conf could not be found\n");
+        exit(EXIT_FAILURE);
+    }
+
+    char buffer[1025];
+    while (fgets(buffer, 1024, fp)) {
+        //Handle each line here
+    }
+}
 /*
  * FUNCTION: startServer
  *
@@ -318,7 +331,8 @@ size_t addClient(int sock) {
  * void
  */
 void initClientStruct(struct client *newClient, int sock) {
-    newClient->socket = sock;
+    newClient->socket_1 = sock;
+    newClient->socket_2 = sock;
     newClient->lock = checked_malloc(sizeof(pthread_mutex_t));
     pthread_mutex_init(newClient->lock, NULL);
     newClient->enabled = true;
@@ -372,6 +386,10 @@ void handleIncomingConnection(const int efd) {
         struct epoll_event ev;
         ev.events = EPOLLIN | EPOLLET | EPOLLEXCLUSIVE;
         ev.data.ptr = newClientEntry;
+
+        addEpollSocket(efd, sock, &ev);
+
+        ev.data.u64 = ((uintptr_t) newClientEntry) + 1;
 
         addEpollSocket(efd, sock, &ev);
     }
