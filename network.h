@@ -29,6 +29,6 @@ void *eventLoop(void *epollfd);
 void handleIncomingConnection(const int efd);
 void handleSocketError(struct client *entry);
 void handleIncomingPacket(struct client *src);
-void establish_forwarding_connections(void);
+void establish_forwarding_rule(const long listen_port, const char *addr, const long output_port);
 
 #endif

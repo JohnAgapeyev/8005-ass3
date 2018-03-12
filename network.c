@@ -124,19 +124,10 @@ void process_packet(const unsigned char * const buffer, const size_t bufsize, st
 #endif
 }
 
-//File goes 
-void establish_forwarding_connections(void) {
-    FILE *fp = fopen("forward.conf", "r");
-    if (fp == NULL) {
-        fprintf(stderr, "Configuration file forward.conf could not be found\n");
-        exit(EXIT_FAILURE);
-    }
+void establish_forwarding_rule(const long listen_port, const char *restrict addr, const long output_port) {
 
-    char buffer[1025];
-    while (fgets(buffer, 1024, fp)) {
-        //Handle each line here
-    }
 }
+
 /*
  * FUNCTION: startServer
  *
@@ -239,7 +230,7 @@ void *eventLoop(void *epollfd) {
                     if (eventList[i].data.ptr) {
                         //Regular read connection
                         struct client *client = (struct client *) eventList[i].data.ptr;
-                        forward_traffic(client->socket, client->socket, client);
+                        forward_traffic(client->socket_1, client->socket_2, client);
                     } else {
                         //Null data pointer means listen socket has incoming connection
                         handleIncomingConnection(efd);
@@ -418,7 +409,7 @@ void handleIncomingConnection(const int efd) {
  */
 void handleSocketError(struct client *entry) {
     pthread_mutex_lock(&clientLock);
-    int sock = (entry) ? entry->socket : listenSock;
+    int sock = (entry) ? entry->socket_1: listenSock;
     fprintf(stderr, "Disconnection/error on socket %d\n", sock);
 
     //Don't need to deregister socket from epoll
@@ -454,7 +445,7 @@ void handleSocketError(struct client *entry) {
  * Handles the staggered and full read, before passing the packet off.
  */
 void handleIncomingPacket(struct client *src) {
-    const int sock = src->socket;
+    const int sock = src->socket_1;
     //unsigned char buffer[MAX_PACKET_SIZE];
     for (;;) {
     }

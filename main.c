@@ -37,6 +37,7 @@
 #include "network.h"
 
 static void sighandler(int signo);
+static void parse_config_file(void);
 
 static struct option long_options[] = {
     {"port",    required_argument, 0, 'p'},
@@ -107,6 +108,8 @@ int main(int argc, char **argv) {
                 return EXIT_SUCCESS;
         }
     }
+    parse_config_file();
+    return 0;
     if (portString == NULL) {
         puts("No port set, reverting to port 1337");
         portString = "1337";
@@ -124,6 +127,50 @@ int main(int argc, char **argv) {
     close(listenSock);
 
     return EXIT_SUCCESS;
+}
+
+/**
+ * Log file must be listen port, outbound ip, and optionally outbound port
+ */
+void parse_config_file(void) {
+    const char *delim = ",";
+    FILE *fp = fopen("forward.conf", "r");
+    if (fp == NULL) {
+        fatal_error("forward.conf could not be located");
+    }
+
+    char buffer[1025];
+    char output_address[1025];
+    long listen_port;
+    long output_port;
+    while(fgets(buffer, 1024, fp)) {
+        char *contents = strtok(buffer, delim);
+        if (contents == NULL) {
+            continue;
+        }
+        listen_port = strtol(contents, NULL, 10);
+        if (errno == ERANGE) {
+            fatal_error("Invalid port in config file");
+        }
+        contents = strtok(NULL, delim);
+        if (contents == NULL) {
+            fprintf(stderr, "Invalid rule format in config file\n");
+            continue;
+        }
+        strncpy(output_address, contents, 1025);
+        contents = strtok(NULL, delim);
+        if (contents == NULL) {
+            printf("Output port not specified, defaulting to listen port\n");
+            output_port = listen_port;
+        } else {
+            output_port = strtol(contents, NULL, 10);
+            if (errno == ERANGE) {
+                fatal_error("Invalid port in config file");
+            }
+        }
+        printf("Adding forwarding on port %ld to %s:%ld\n", listen_port, output_address, output_port);
+        establish_forwarding_rule(listen_port, output_address, output_port);
+    }
 }
 
 /*
