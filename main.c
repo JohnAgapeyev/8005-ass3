@@ -102,7 +102,6 @@ int main(int argc, char **argv) {
         }
     }
     parse_config_file();
-    return 0;
     startServer();
 
     return EXIT_SUCCESS;
