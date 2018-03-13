@@ -7,8 +7,8 @@
 #include <pthread.h>
 
 struct client {
-    int socket_1;
-    int socket_2;
+    int local;
+    int remote;
     bool enabled;
     pthread_mutex_t *lock;
     int pipes[2];
@@ -16,8 +16,6 @@ struct client {
 
 extern struct client **clientList;
 extern size_t clientCount;
-extern unsigned short port;
-extern int listenSock;
 
 void network_init(void);
 void network_cleanup(void);
@@ -26,9 +24,9 @@ void startServer(void);
 size_t addClient(int sock);
 void initClientStruct(struct client *newClient, int sock);
 void *eventLoop(void *epollfd);
-void handleIncomingConnection(const int efd);
+void handleIncomingConnection(const int listen_sock, const int index);
 void handleSocketError(struct client *entry);
 void handleIncomingPacket(struct client *src);
-void establish_forwarding_rule(const long listen_port, const char *addr, const long output_port);
+void establish_forwarding_rule(const long listen_port, const char *addr, const char *output_port);
 
 #endif

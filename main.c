@@ -40,7 +40,6 @@ static void sighandler(int signo);
 static void parse_config_file(void);
 
 static struct option long_options[] = {
-    {"port",    required_argument, 0, 'p'},
     {"help",    no_argument,       0, 'h'},
     {0,         0,                 0, 0}
 };
@@ -48,7 +47,6 @@ static struct option long_options[] = {
 #define print_help() \
     do { \
     printf("usage options:\n"\
-            "\t [p]ort <1-65535>        - the port to use, default 1337\n"\
             "\t [h]elp                  - this message\n"\
             );\
     } while(0)
@@ -87,18 +85,13 @@ int main(int argc, char **argv) {
     sigaction(SIGQUIT,&sigHandleList,0);
     sigaction(SIGTERM,&sigHandleList,0);
 
-    char *portString = NULL;
-
     int c;
     for (;;) {
         int option_index = 0;
-        if ((c = getopt_long(argc, argv, "p:h", long_options, &option_index)) == -1) {
+        if ((c = getopt_long(argc, argv, "h", long_options, &option_index)) == -1) {
             break;
         }
         switch (c) {
-            case 'p':
-                portString = optarg;
-                break;
             case 'h':
                 //Intentional fallthrough
             case '?':
@@ -110,21 +103,7 @@ int main(int argc, char **argv) {
     }
     parse_config_file();
     return 0;
-    if (portString == NULL) {
-        puts("No port set, reverting to port 1337");
-        portString = "1337";
-    }
-    port = strtoul(portString, NULL, 0);
-    if (errno == EINVAL || errno == ERANGE) {
-        perror("strtoul");
-        return EXIT_FAILURE;
-    }
-
-    listenSock = createSocket(AF_INET, SOCK_STREAM, 0);
-    bindSocket(listenSock, port);
-    listen(listenSock, SOMAXCONN);
     startServer();
-    close(listenSock);
 
     return EXIT_SUCCESS;
 }
@@ -142,7 +121,7 @@ void parse_config_file(void) {
     char buffer[1025];
     char output_address[1025];
     long listen_port;
-    long output_port;
+    char output_port[1025];
     while(fgets(buffer, 1024, fp)) {
         char *contents = strtok(buffer, delim);
         if (contents == NULL) {
@@ -161,14 +140,11 @@ void parse_config_file(void) {
         contents = strtok(NULL, delim);
         if (contents == NULL) {
             printf("Output port not specified, defaulting to listen port\n");
-            output_port = listen_port;
+            sprintf(output_port, "%ld", listen_port);
         } else {
-            output_port = strtol(contents, NULL, 10);
-            if (errno == ERANGE) {
-                fatal_error("Invalid port in config file");
-            }
+            strncpy(output_port, contents, 1025);
         }
-        printf("Adding forwarding on port %ld to %s:%ld\n", listen_port, output_address, output_port);
+        printf("Adding forwarding on port %ld to %s:%s\n", listen_port, output_address, output_port);
         establish_forwarding_rule(listen_port, output_address, output_port);
     }
 }

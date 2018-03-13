@@ -23,8 +23,9 @@
 struct client **clientList;
 size_t clientCount;
 size_t clientMax;
-unsigned short port;
-int listenSock;
+int efd;
+
+uint64_t epoll_mask = 0xffffff;
 
 pthread_mutex_t clientLock;
 
@@ -50,10 +51,11 @@ pthread_mutex_t clientLock;
  * Initializes network state for the application
  */
 void network_init(void) {
-    clientList = checked_calloc(10000, sizeof(struct client *));
+    clientList = checked_calloc(100, sizeof(struct client *));
     clientCount = 1;
-    clientMax = 10000;
+    clientMax = 100;
     pthread_mutex_init(&clientLock, NULL);
+    int efd = createEpollFd();
 }
 
 /*
@@ -86,6 +88,7 @@ void network_cleanup(void) {
     }
     pthread_mutex_destroy(&clientLock);
     free(clientList);
+    close(efd);
 }
 
 /*
@@ -124,8 +127,23 @@ void process_packet(const unsigned char * const buffer, const size_t bufsize, st
 #endif
 }
 
-void establish_forwarding_rule(const long listen_port, const char *restrict addr, const long output_port) {
+void establish_forwarding_rule(const long listen_port, const char *restrict addr, const char *restrict output_port) {
+    unsigned int sock = createSocket(AF_INET, SOCK_STREAM, 0);
 
+    setNonBlocking(sock);
+
+    bindSocket(sock, listen_port);
+    listen(sock, SOMAXCONN);
+
+    int remote = establishConnection(addr, output_port);
+
+    unsigned int index = addClient(remote);
+
+    struct epoll_event ev;
+    ev.events = EPOLLIN | EPOLLET | EPOLLEXCLUSIVE;
+    ev.data.u64 = ((uint64_t) sock << 24ul) + ((uint64_t) index << 48ul);
+
+    addEpollSocket(efd, sock, &ev);
 }
 
 /*
@@ -162,9 +180,9 @@ void startServer(void) {
     ev.events = EPOLLIN | EPOLLET | EPOLLEXCLUSIVE;
     ev.data.ptr = NULL;
 
-    addEpollSocket(efd, listenSock, &ev);
+    //addEpollSocket(efd, listenSock, &ev);
 
-    setNonBlocking(listenSock);
+    //setNonBlocking(listenSock);
 
     pthread_attr_t attr;
     pthread_attr_init(&attr);
@@ -227,13 +245,15 @@ void *eventLoop(void *epollfd) {
                 handleSocketError(eventList[i].data.ptr);
             } else {
                 if (likely(eventList[i].events & EPOLLIN)) {
-                    if (eventList[i].data.ptr) {
+                    if ((eventList[i].data.u64 & epoll_mask) != 0) {
                         //Regular read connection
                         struct client *client = (struct client *) eventList[i].data.ptr;
-                        forward_traffic(client->socket_1, client->socket_2, client);
+                        forward_traffic(client->local, client->remote, client);
                     } else {
-                        //Null data pointer means listen socket has incoming connection
-                        handleIncomingConnection(efd);
+                        //Shift fd back, and zero the index portion
+                        unsigned int listen_sock = (eventList[i].data.u64 >> 24) & epoll_mask;
+                        unsigned int index = eventList[i].data.u64 >> 48;
+                        handleIncomingConnection(listen_sock, index);
                     }
                 }
             }
@@ -322,8 +342,8 @@ size_t addClient(int sock) {
  * void
  */
 void initClientStruct(struct client *newClient, int sock) {
-    newClient->socket_1 = sock;
-    newClient->socket_2 = sock;
+    newClient->local = sock;
+    newClient->remote = sock;
     newClient->lock = checked_malloc(sizeof(pthread_mutex_t));
     pthread_mutex_init(newClient->lock, NULL);
     newClient->enabled = true;
@@ -356,34 +376,33 @@ void initClientStruct(struct client *newClient, int sock) {
  * NOTES:
  * Adds an incoming connection to the client list, and initiates the handshake.
  */
-void handleIncomingConnection(const int efd) {
-    for(;;) {
-        int sock = accept(listenSock, NULL, NULL);
-        if (sock == -1) {
-            if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                //No incoming connections, ignore the error
-                break;
-            }
-            fatal_error("accept");
+void handleIncomingConnection(const int listen_sock, const int index) {
+    struct sockaddr_in addr;
+    socklen_t addr_len;
+    int local = accept(listen_sock, &addr, &addr_len);
+    if (local == -1) {
+        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            //No incoming connections, ignore the error
+            return;
         }
-
-        setNonBlocking(sock);
-
-        size_t newClientIndex = addClient(sock);
-        pthread_mutex_lock(&clientLock);
-        struct client *newClientEntry = clientList[newClientIndex];
-        pthread_mutex_unlock(&clientLock);
-
-        struct epoll_event ev;
-        ev.events = EPOLLIN | EPOLLET | EPOLLEXCLUSIVE;
-        ev.data.ptr = newClientEntry;
-
-        addEpollSocket(efd, sock, &ev);
-
-        ev.data.u64 = ((uintptr_t) newClientEntry) + 1;
-
-        addEpollSocket(efd, sock, &ev);
+        fatal_error("accept");
     }
+
+    setNonBlocking(local);
+
+    pthread_mutex_lock(&clientLock);
+    struct client *newClientEntry = clientList[index];
+    pthread_mutex_unlock(&clientLock);
+
+    struct epoll_event ev;
+    ev.events = EPOLLIN | EPOLLET | EPOLLEXCLUSIVE;
+    ev.data.u64 = ((uintptr_t) newClientEntry);
+
+    addEpollSocket(efd, local, &ev);
+
+    ev.data.u64 = ((uintptr_t) newClientEntry) + 1;
+
+    addEpollSocket(efd, newClientEntry->remote, &ev);
 }
 
 /*
@@ -409,7 +428,7 @@ void handleIncomingConnection(const int efd) {
  */
 void handleSocketError(struct client *entry) {
     pthread_mutex_lock(&clientLock);
-    int sock = (entry) ? entry->socket_1: listenSock;
+    int sock = (entry) ? entry->local: entry->remote;
     fprintf(stderr, "Disconnection/error on socket %d\n", sock);
 
     //Don't need to deregister socket from epoll
@@ -445,7 +464,7 @@ void handleSocketError(struct client *entry) {
  * Handles the staggered and full read, before passing the packet off.
  */
 void handleIncomingPacket(struct client *src) {
-    const int sock = src->socket_1;
+    const int sock = src->local;
     //unsigned char buffer[MAX_PACKET_SIZE];
     for (;;) {
     }
