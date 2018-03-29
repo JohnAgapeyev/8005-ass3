@@ -143,8 +143,6 @@ void startServer(void) {
     pthread_attr_init(&attr);
     cpu_set_t cpus;
 
-    const size_t core_count = sysconf(_SC_NPROCESSORS_ONLN);
-
     pthread_t threads[core_count - 1];
     for (size_t i = 0; i < core_count - 1; ++i) {
         CPU_ZERO(&cpus);
