@@ -299,7 +299,7 @@ start:
 
 void forward_traffic(const int in, const int out, const struct client *const client) {
     for (;;) {
-        int n = splice(in, NULL, client->pipes[0], NULL, USHRT_MAX, SPLICE_F_MOVE | SPLICE_F_NONBLOCK);
+        int n = splice(in, NULL, client->pipes[1], NULL, USHRT_MAX, SPLICE_F_MOVE | SPLICE_F_NONBLOCK);
         if (n == -1) {
             if (errno == EAGAIN) {
                 return;
@@ -312,7 +312,7 @@ void forward_traffic(const int in, const int out, const struct client *const cli
             //Don't need non_blocking because the only blocking would be sending, which should be blocked on
             int x;
 resend:
-            x = splice(client->pipes[1], NULL, out, NULL, n, SPLICE_F_MOVE | SPLICE_F_MORE);
+            x = splice(client->pipes[0], NULL, out, NULL, n, SPLICE_F_MOVE | SPLICE_F_MORE);
             if (x == -1) {
                 fatal_error("splice2");
             } else if (x == 0) {
