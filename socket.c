@@ -159,7 +159,7 @@ void bindSocket(const int sock, const unsigned short port) {
 int establishConnection(const char *address, const char *port) {
     struct addrinfo hints;
     memset(&hints, 0, sizeof (struct addrinfo));
-    hints.ai_family = AF_UNSPEC;     // Return IPv4 and IPv6 choices
+    hints.ai_family = AF_INET;     // Return IPv4 and IPv6 choices
     hints.ai_socktype = SOCK_STREAM; // We want a TCP socket
     hints.ai_flags = (AI_ADDRCONFIG | AI_V4MAPPED);
 

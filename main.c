@@ -101,9 +101,10 @@ int main(int argc, char **argv) {
                 return EXIT_SUCCESS;
         }
     }
+    network_init();
     parse_config_file();
-    return 0;
     startServer();
+    network_cleanup();
 
     return EXIT_SUCCESS;
 }
@@ -112,7 +113,7 @@ int main(int argc, char **argv) {
  * Log file must be listen port, outbound ip, and optionally outbound port
  */
 void parse_config_file(void) {
-    const char *delim = ",";
+    const char *delim = ",\n";
     FILE *fp = fopen("forward.conf", "r");
     if (fp == NULL) {
         fatal_error("forward.conf could not be located");
@@ -144,6 +145,7 @@ void parse_config_file(void) {
         } else {
             strncpy(output_port, contents, 1025);
         }
+
         printf("Adding forwarding on port %ld to %s:%s\n", listen_port, output_address, output_port);
         establish_forwarding_rule(listen_port, output_address, output_port);
     }

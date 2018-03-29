@@ -55,7 +55,7 @@ void network_init(void) {
     clientCount = 1;
     clientMax = 100;
     pthread_mutex_init(&clientLock, NULL);
-    int efd = createEpollFd();
+    efd = createEpollFd();
 }
 
 /*
@@ -172,17 +172,6 @@ void establish_forwarding_rule(const long listen_port, const char *restrict addr
  */
 void startServer(void) {
     const size_t core_count = sysconf(_SC_NPROCESSORS_ONLN);
-    network_init();
-
-    int efd = createEpollFd();
-
-    struct epoll_event ev;
-    ev.events = EPOLLIN | EPOLLET | EPOLLEXCLUSIVE;
-    ev.data.ptr = NULL;
-
-    //addEpollSocket(efd, listenSock, &ev);
-
-    //setNonBlocking(listenSock);
 
     pthread_attr_t attr;
     pthread_attr_init(&attr);
@@ -193,18 +182,16 @@ void startServer(void) {
         CPU_ZERO(&cpus);
         CPU_SET(i % core_count, &cpus);
         pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpus);
-        pthread_create(&threads[i], &attr, eventLoop, &(int){i % core_count});
+        pthread_create(&threads[i], &attr, eventLoop, &efd);
     }
     pthread_attr_destroy(&attr);
 
-    eventLoop(&(int){core_count});
+    eventLoop(&efd);
 
     for (size_t i = 0; i < core_count; ++i) {
         pthread_kill(threads[i], SIGKILL);
         pthread_join(threads[i], NULL);
     }
-
-    network_cleanup();
 }
 
 /*
