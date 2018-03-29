@@ -197,7 +197,19 @@ void *eventLoop(void *epollfd) {
         assert(n != -1);
         for (int i = 0; i < n; ++i) {
             if (unlikely(eventList[i].events & EPOLLERR || eventList[i].events & EPOLLHUP)) {
-                handleSocketError(eventList[i].data.ptr);
+                if ((eventList[i].data.u64 & epoll_mask) != 0) {
+                    unsigned int listen_sock = (eventList[i].data.u64 >> 24) & epoll_mask;
+                    unsigned int index = eventList[i].data.u64 >> 48;
+                    fprintf(stderr, "Disconnection/error on listening socket %d\n", listen_sock);
+
+                    pthread_mutex_lock(&clientLock);
+                    close(listen_sock);
+                    clientList[index]->enabled = false;
+                    pthread_mutex_unlock(&clientLock);
+                } else {
+                    struct client *client = (struct client *) (eventList[i].data.u64 - (eventList[i].data.u64 & 1));
+                    handleSocketError(client);
+                }
             } else {
                 if (likely(eventList[i].events & EPOLLIN)) {
                     if ((eventList[i].data.u64 & epoll_mask) != 0) {
@@ -389,11 +401,11 @@ void handleIncomingConnection(const int listen_sock, const int index) {
  */
 void handleSocketError(struct client *entry) {
     pthread_mutex_lock(&clientLock);
-    int sock = (entry) ? entry->local: entry->remote;
-    fprintf(stderr, "Disconnection/error on socket %d\n", sock);
+    fprintf(stderr, "Disconnection/error on socket pair %d:%d\n", entry->local, entry->remote);
 
     //Don't need to deregister socket from epoll
-    close(sock);
+    close(entry->local);
+    close(entry->remote);
 
     entry->enabled = false;
 
