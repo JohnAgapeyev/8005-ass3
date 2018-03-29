@@ -10,8 +10,7 @@
  * void setNonBlocking(const int sock);
  * void bindSocket(const int sock, const unsigned short port);
  * int establishConnection(const char *address, const char *port);
- * size_t readNBytes(const int sock, unsigned char *buf, size_t bufsize);
- * void rawSend(const int sock, const unsigned char *buffer, size_t bufSize);
+ * void forward_traffic(const int in, const int out, const struct client *const client);
  *
  * DESIGNER: John Agapeyev
  *
@@ -26,8 +25,6 @@ int createSocket(int domain, int type, int protocol);
 void setNonBlocking(const int sock);
 void bindSocket(const int sock, const unsigned short port);
 int establishConnection(const char *address, const char *port);
-ssize_t readNBytes(const int sock, unsigned char *buf, size_t bufsize);
-void rawSend(const int sock, const unsigned char *buffer, size_t bufSize);
 void forward_traffic(const int in, const int out, const struct client *const client);
 
 #endif
