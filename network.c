@@ -91,42 +91,6 @@ void network_cleanup(void) {
     close(efd);
 }
 
-/*
- * FUNCTION: process_packet
- *
- * DATE:
- * Dec. 2, 2017
- *
- * DESIGNER:
- * John Agapeyev
- *
- * PROGRAMMER:
- * John Agapeyev
- *
- * INTERFACE:
- * void process_packet(const unsigned char * const buffer, const size_t bufsize, struct client *src);
- *
- * PARAMETERS:
- * const unsigned char *const buffer - The buffer containing the buffer
- * const size_T bufsize - The size of the packet buffer
- * struct client *src - The client struct of who sent the packet
- *
- * RETURNS:
- * void
- */
-void process_packet(const unsigned char * const buffer, const size_t bufsize, struct client *src) {
-    debug_print("Received packet of size %zu\n", bufsize);
-    debug_print_buffer("Raw hex output: ", buffer, bufsize);
-
-#ifndef NDEBUG
-    debug_print("\nText output: ");
-    for (size_t i = 0; i < bufsize; ++i) {
-        fprintf(stderr, "%c", buffer[i]);
-    }
-    fprintf(stderr, "\n");
-#endif
-}
-
 void establish_forwarding_rule(const long listen_port, const char *restrict addr, const char *restrict output_port) {
     unsigned int sock = createSocket(AF_INET, SOCK_STREAM, 0);
 
@@ -136,6 +100,8 @@ void establish_forwarding_rule(const long listen_port, const char *restrict addr
     listen(sock, SOMAXCONN);
 
     int remote = establishConnection(addr, output_port);
+
+    setNonBlocking(sock);
 
     unsigned int index = addClient(remote);
 
@@ -177,8 +143,10 @@ void startServer(void) {
     pthread_attr_init(&attr);
     cpu_set_t cpus;
 
-    pthread_t threads[core_count];
-    for (size_t i = 0; i < core_count; ++i) {
+    const size_t core_count = sysconf(_SC_NPROCESSORS_ONLN);
+
+    pthread_t threads[core_count - 1];
+    for (size_t i = 0; i < core_count - 1; ++i) {
         CPU_ZERO(&cpus);
         CPU_SET(i % core_count, &cpus);
         pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpus);
@@ -188,7 +156,7 @@ void startServer(void) {
 
     eventLoop(&efd);
 
-    for (size_t i = 0; i < core_count; ++i) {
+    for (size_t i = 0; i < core_count - 1; ++i) {
         pthread_kill(threads[i], SIGKILL);
         pthread_join(threads[i], NULL);
     }
@@ -234,8 +202,14 @@ void *eventLoop(void *epollfd) {
                 if (likely(eventList[i].events & EPOLLIN)) {
                     if ((eventList[i].data.u64 & epoll_mask) != 0) {
                         //Regular read connection
-                        struct client *client = (struct client *) eventList[i].data.ptr;
-                        forward_traffic(client->local, client->remote, client);
+                        struct client *client;
+                        if (eventList[i].data.u64 & 1) {
+                            client = (struct client *) (eventList[i].data.u64 - 1);
+                            forward_traffic(client->remote, client->local, client);
+                        } else {
+                            client = (struct client *) (eventList[i].data.u64);
+                            forward_traffic(client->local, client->remote, client);
+                        }
                     } else {
                         //Shift fd back, and zero the index portion
                         unsigned int listen_sock = (eventList[i].data.u64 >> 24) & epoll_mask;
@@ -329,7 +303,7 @@ size_t addClient(int sock) {
  * void
  */
 void initClientStruct(struct client *newClient, int sock) {
-    newClient->local = sock;
+    newClient->local = 0;
     newClient->remote = sock;
     newClient->lock = checked_malloc(sizeof(pthread_mutex_t));
     pthread_mutex_init(newClient->lock, NULL);
@@ -364,9 +338,7 @@ void initClientStruct(struct client *newClient, int sock) {
  * Adds an incoming connection to the client list, and initiates the handshake.
  */
 void handleIncomingConnection(const int listen_sock, const int index) {
-    struct sockaddr_in addr;
-    socklen_t addr_len;
-    int local = accept(listen_sock, &addr, &addr_len);
+    int local = accept(listen_sock, NULL, NULL);
     if (local == -1) {
         if (errno == EAGAIN || errno == EWOULDBLOCK) {
             //No incoming connections, ignore the error
@@ -381,11 +353,13 @@ void handleIncomingConnection(const int listen_sock, const int index) {
     struct client *newClientEntry = clientList[index];
     pthread_mutex_unlock(&clientLock);
 
+    newClientEntry->local = local;
+
     struct epoll_event ev;
     ev.events = EPOLLIN | EPOLLET | EPOLLEXCLUSIVE;
     ev.data.u64 = ((uintptr_t) newClientEntry);
 
-    addEpollSocket(efd, local, &ev);
+    addEpollSocket(efd, newClientEntry->local, &ev);
 
     ev.data.u64 = ((uintptr_t) newClientEntry) + 1;
 
@@ -424,36 +398,5 @@ void handleSocketError(struct client *entry) {
     entry->enabled = false;
 
     pthread_mutex_unlock(&clientLock);
-}
-
-/*
- * FUNCTION: handleIncomingPacket
- *
- * DATE:
- * Dec. 2, 2017
- *
- * DESIGNER:
- * John Agapeyev
- *
- * PROGRAMMER:
- * John Agapeyev
- *
- * INTERFACE:
- * void handleIncomingPacket(struct client *src);
- *
- * PARAMETERS:
- * struct client *src - The source of the incoming packet
- *
- * RETURNS:
- * void
- *
- * NOTES:
- * Handles the staggered and full read, before passing the packet off.
- */
-void handleIncomingPacket(struct client *src) {
-    const int sock = src->local;
-    //unsigned char buffer[MAX_PACKET_SIZE];
-    for (;;) {
-    }
 }
 
