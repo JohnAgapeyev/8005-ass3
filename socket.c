@@ -314,7 +314,11 @@ void forward_traffic(const int in, const int out, const struct client *const cli
 resend:
             x = splice(client->pipes[0], NULL, out, NULL, USHRT_MAX, SPLICE_F_MOVE | SPLICE_F_MORE | SPLICE_F_NONBLOCK);
             if (x == -1) {
-                fatal_error("splice2");
+                if (errno == EAGAIN) {
+                    goto resend;
+                } else {
+                    fatal_error("splice2");
+                }
             } else if (x == 0) {
                 //Input pipe is empty
                 continue;
