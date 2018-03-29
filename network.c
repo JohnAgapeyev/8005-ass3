@@ -103,6 +103,8 @@ void establish_forwarding_rule(const long listen_port, const char *restrict addr
 
     setNonBlocking(sock);
 
+    setNonBlocking(remote);
+
     unsigned int index = addClient(remote);
 
     struct epoll_event ev;
