@@ -191,6 +191,29 @@ int establishConnection(const char *address, const char *port) {
     return sock;
 }
 
+/*
+ * FUNCTION: forward_traffic
+ *
+ * DATE:
+ * April 7 2018
+ *
+ * DESIGNER:
+ * John Agapeyev
+ *
+ * PROGRAMMER:
+ * John Agapeyev
+ *
+ * INTERFACE:
+ * void forward_traffic(const int in, const int out, const struct client *const client) {
+ *
+ * PARAMETERS:
+ * const int in - The input file descriptor
+ * const int out - The output file descriptor
+ * const struct client *const client - The client connection involved in the forwarding
+ *
+ * RETURNS:
+ * void
+ */
 void forward_traffic(const int in, const int out, const struct client *const client) {
     for (;;) {
         int n = splice(in, NULL, client->pipes[1], NULL, USHRT_MAX, SPLICE_F_MOVE | SPLICE_F_NONBLOCK);

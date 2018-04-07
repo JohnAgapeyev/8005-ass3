@@ -91,6 +91,33 @@ void network_cleanup(void) {
     close(efd);
 }
 
+/*
+ * FUNCTION: establish_forwarding_rule
+ *
+ * DATE:
+ * April 7 2018
+ *
+ * DESIGNER:
+ * John Agapeyev
+ *
+ * PROGRAMMER:
+ * John Agapeyev
+ *
+ * INTERFACE:
+ * void establish_forwarding_rule(const long listen_port, const char *restrict addr, const char *restrict output_port);
+ *
+ * PARAMETERS:
+ * const long listen_port - The incoming port number to listen on
+ * const char *restrict addr - A string of the outgoing address
+ * const char *restrict output_port - A string of the outgoing port
+ *
+ * RETURNS:
+ * void
+ *
+ * NOTES:
+ * The addr and output_port need to be strings based on the getaddrinfo interface, so they are not converted
+ * to sockaddr and int repsectively for this call.
+ */
 void establish_forwarding_rule(const long listen_port, const char *restrict addr, const char *restrict output_port) {
     unsigned int sock = createSocket(AF_INET, SOCK_STREAM, 0);
 

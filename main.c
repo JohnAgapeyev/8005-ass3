@@ -7,7 +7,7 @@
  *
  * FUNCTIONS:
  * static void sighandler(int signo);
- * char *getUserInput(const char *prompt);
+ * static void parse_config_file(void);
  * void debug_print_buffer(const char *prompt, const unsigned char *buffer, const size_t size);
  * void *checked_malloc(const size_t size);
  * void *checked_calloc(const size_t nmemb, const size_t size);
@@ -26,7 +26,6 @@
 #include <string.h>
 #include <ctype.h>
 #include <signal.h>
-#include <getopt.h>
 #include <assert.h>
 #include <sys/socket.h>
 #include <sys/resource.h>
@@ -38,18 +37,6 @@
 
 static void sighandler(int signo);
 static void parse_config_file(void);
-
-static struct option long_options[] = {
-    {"help",    no_argument,       0, 'h'},
-    {0,         0,                 0, 0}
-};
-
-#define print_help() \
-    do { \
-    printf("usage options:\n"\
-            "\t [h]elp                  - this message\n"\
-            );\
-    } while(0)
 
 /*
  * FUNCTION: main
@@ -64,19 +51,15 @@ static struct option long_options[] = {
  * John Agapeyev
  *
  * INTERFACE:
- * int main(int argc, char **argv)
- *
- * PARAMETERS:
- * int argc - The number of command arguments
- * char **argv - A list of the command arguments as strings
+ * int main(void)
  *
  * RETURNS:
  * int - The application return code
  *
  * NOTES:
- * Validates command arguments and starts client/server from here
+ * Starts client/server from here
  */
-int main(int argc, char **argv) {
+int main(void) {
     isRunning = ATOMIC_VAR_INIT(1);
 
     struct sigaction sigHandleList = {.sa_handler=sighandler};
@@ -85,22 +68,6 @@ int main(int argc, char **argv) {
     sigaction(SIGQUIT,&sigHandleList,0);
     sigaction(SIGTERM,&sigHandleList,0);
 
-    int c;
-    for (;;) {
-        int option_index = 0;
-        if ((c = getopt_long(argc, argv, "h", long_options, &option_index)) == -1) {
-            break;
-        }
-        switch (c) {
-            case 'h':
-                //Intentional fallthrough
-            case '?':
-                //Intentional fallthrough
-            default:
-                print_help();
-                return EXIT_SUCCESS;
-        }
-    }
     network_init();
     parse_config_file();
     startServer();
@@ -109,8 +76,29 @@ int main(int argc, char **argv) {
     return EXIT_SUCCESS;
 }
 
-/**
- * Log file must be listen port, outbound ip, and optionally outbound port
+/*
+ * FUNCTION: parse_config_file
+ *
+ * DATE:
+ * April 7 2018
+ *
+ * DESIGNER:
+ * John Agapeyev
+ *
+ * PROGRAMMER:
+ * John Agapeyev
+ *
+ * INTERFACE:
+ * void parse_config_file(void);
+ *
+ * RETURNS:
+ * void
+ *
+ * NOTES:
+ * Config file is hardcoded to be forward.conf in current directory.
+ * All rules are CSV, each line is new rule
+ * Format is [input port],[output address],[output port]
+ * The output port is optional, and will default to the input port when none is provided
  */
 void parse_config_file(void) {
     const char *delim = ",\n";
